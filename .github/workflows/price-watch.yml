@@ -1,0 +1,73 @@
+name: price-watch
+
+on:
+  schedule:
+    # 23:07 UTC = 08:07 JST（毎日1回）
+    - cron: "7 23 * * *"
+  workflow_dispatch:
+    inputs:
+      force_email:
+        description: "テスト用: 価格に関係なくメールを送る"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: price-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 価格をチェック
+        id: check
+        env:
+          PRODUCT_URL: https://banneroftruth.org/uk/store/new-release/systematic-theology/
+          BINDING: cloth-bound
+          THRESHOLD_PENCE: "1800"
+        run: python scripts/check_price.py
+
+      - name: 値下がりをメール通知
+        if: steps.check.outputs.dropped == 'true' || inputs.force_email
+        uses: dawidd6/action-send-mail@v22
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: Price Watch <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.MAIL_TO }}
+          subject: "[値下がり] ${{ steps.check.outputs.title }} が ${{ steps.check.outputs.price }} になりました"
+          body: |
+            Banner of Truth (UK) の価格が、しきい値 ${{ steps.check.outputs.threshold }} を下回りました。
+
+            商品 : ${{ steps.check.outputs.title }}
+            価格 : ${{ steps.check.outputs.price }}（しきい値 ${{ steps.check.outputs.threshold }}）
+            在庫 : ${{ steps.check.outputs.available }}
+            URL  : ${{ steps.check.outputs.url }}
+
+            ---
+            この通知は同じ価格では1回だけ送られます。
+            さらに値下がりした場合は、改めて通知されます。
+
+      - name: 価格ログを commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "chore: 価格チェック $(date -u +%Y-%m-%d)"
+            git push
+          fi
