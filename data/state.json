@@ -1,4 +1,6 @@
 {
-  "last_checked_at": "2026-11-12T03:43:39Z",
-  "last_price_pence": 1800
+  "last_checked_at": "2026-11-13T03:21:00Z",
+  "last_price_pence": 1440,
+  "last_notified_pence": 1440,
+  "last_notified_at": "2026-11-13T03:21:00Z"
 }
